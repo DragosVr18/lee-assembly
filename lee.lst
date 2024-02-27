@@ -1,0 +1,308 @@
+     1                                  bits 32 ; assembling for the 32 bits architecture
+     2                                  
+     3                                  ; declare the EntryPoint (a label defining the very first instruction of the program)
+     4                                  global start        
+     5                                  
+     6                                  ; declare external functions needed by our program
+     7                                  extern exit,fread,fscanf,fopen,fclose,printf,scanf               ; tell nasm that exit exists even if we won't be defining it
+     8                                  import exit msvcrt.dll    ; exit is a function that ends the calling process. It is defined in msvcrt.dll
+     9                                  import fread msvcrt.dll 
+    10                                  import fscanf msvcrt.dll 
+    11                                  import fopen msvcrt.dll 
+    12                                  import fclose msvcrt.dll
+    13                                  import printf msvcrt.dll                          
+    14                                  import scanf msvcrt.dll ; msvcrt.dll contains exit, printf and all the other important C-runtime specific functions
+    15                                  
+    16                                  ; our data is declared here (the variables needed by our program)
+    17                                  segment data use32 class=data
+    18                                      ; ...
+    19 00000000 00000000<rept>              queue times 1000 dd 0
+    20 00000FA0 00<rept>                    matrix times 10000 db 0
+    21 000036B0 00000000                    n dd 0
+    22 000036B4 00000000                    dist dd 0
+    23 000036B8 00000000                    current_x dd 0
+    24 000036BC 00000000                    current_y dd 0
+    25 000036C0 00000000                    queue_count dd 0
+    26 000036C4 00000000                    x_sursa dd 0
+    27 000036C8 00000000                    x_dest dd 0
+    28 000036CC 00000000                    y_sursa dd 0
+    29 000036D0 00000000                    y_dest dd 0
+    30 000036D4 4461746920783A2000          mesaj_citire_x db "Dati x: ",0
+    31 000036DD 4461746920793A2000          mesaj_citire_y db "Dati y: ",0
+    32 000036E6 256400                      format db "%d",0
+    33 000036E9 496E74726F64756365-         mesaj_sursa db "Introduceti coordonatele sursei:",10,13,0
+    33 000036F2 746920636F6F72646F-
+    33 000036FB 6E6174656C65207375-
+    33 00003704 727365693A0A0D00   
+    34 0000370C 496E74726F64756365-         mesaj_destinatie db "Introduceti coordonatele destinatiei:",10,13,0
+    34 00003715 746920636F6F72646F-
+    34 0000371E 6E6174656C65206465-
+    34 00003727 7374696E6174696569-
+    34 00003730 3A0A0D00           
+    35 00003734 7200                        mod_acces db "r",0
+    36 00003736 6C65652E74787400            fisier db "lee.txt",0
+    37 0000373E 00000000                    descriptor dd 0
+    38 00003742 FFFFFFFF0000000000-         directie_x dd -1,0,0,1
+    38 0000374B 00000001000000     
+    39 00003752 00000000FFFFFFFF01-         directie_y dd 0,-1,1,0
+    39 0000375B 00000000000000     
+    40 00003762 44697374616E746120-         mesaj_solutie db "Distanta minima intre cele doua puncte este de %d unitati.",0
+    40 0000376B 6D696E696D6120696E-
+    40 00003774 7472652063656C6520-
+    40 0000377D 646F75612070756E63-
+    40 00003786 746520657374652064-
+    40 0000378F 6520256420756E6974-
+    40 00003798 6174692E00         
+    41 0000379D 4E7520657869737461-         mesaj_not_solutie db "Nu exista nicio cale intre cele doua puncte.",0
+    41 000037A6 206E6963696F206361-
+    41 000037AF 6C6520696E74726520-
+    41 000037B8 63656C6520646F7561-
+    41 000037C1 2070756E6374652E00 
+    42                                  
+    43                                  ; our code starts here
+    44                                  segment code use32 class=code
+    45                                      
+    46                                      deschide_fisier:
+    47 00000000 68[34370000]                    push dword mod_acces
+    48 00000005 68[36370000]                    push dword fisier
+    49 0000000A FF15[00000000]                  call [fopen]
+    50 00000010 83C408                          add esp,4*2
+    51 00000013 83F800                          cmp eax, 0
+    52 00000016 0F84EA020000                    je start.final
+    53 0000001C A3[3E370000]                    mov [descriptor], eax
+    54 00000021 C3                              ret
+    55                                          
+    56                                      citeste_matrice:
+    57 00000022 68[B0360000]                    push dword n
+    58 00000027 68[E6360000]                    push dword format
+    59 0000002C FF35[3E370000]                  push dword [descriptor]
+    60 00000032 FF15[00000000]                  call [fscanf]
+    61 00000038 83C40C                          add esp, 4*3
+    62                                          
+    63 0000003B FF35[3E370000]                  push dword [descriptor]
+    64 00000041 6810270000                      push dword 10000
+    65 00000046 6A01                            push dword 1
+    66 00000048 68[A00F0000]                    push dword matrix
+    67 0000004D FF15[00000000]                  call [fread]
+    68 00000053 83C410                          add esp, 4*4
+    69 00000056 C3                              ret
+    70                                          
+    71                                      inchide_fisier:
+    72 00000057 FF35[3E370000]                  push dword [descriptor]
+    73 0000005D FF15[00000000]                  call [fclose]
+    74 00000063 83C404                          add esp, 4
+    75 00000066 C3                              ret
+    76                                          
+    77                                      afiseaza_solutie:
+    78 00000067 FF35[B4360000]                  push dword [dist]
+    79 0000006D 833D[B4360000]FF                cmp dword [dist], -1
+    80 00000074 7507                            jne .solutie_gasita
+    81 00000076 68[9D370000]                    push dword mesaj_not_solutie
+    82 0000007B EB05                            jmp .afisare
+    83                                          .solutie_gasita:
+    84 0000007D 68[62370000]                    push dword mesaj_solutie
+    85                                          .afisare:
+    86 00000082 FF15[00000000]                  call [printf]
+    87 00000088 83C408                          add esp, 4*2
+    88 0000008B C3                              ret
+    89                                          
+    90                                      citeste_coordonate:
+    91 0000008C 68[E9360000]                    push dword mesaj_sursa
+    92 00000091 FF15[00000000]                  call [printf]
+    93 00000097 83C404                          add esp, 4
+    94                                          
+    95 0000009A 68[D4360000]                    push dword mesaj_citire_x
+    96 0000009F FF15[00000000]                  call [printf]
+    97 000000A5 83C404                          add esp, 4
+    98                                          
+    99 000000A8 68[C4360000]                    push dword x_sursa
+   100 000000AD 68[E6360000]                    push dword format
+   101 000000B2 FF15[00000000]                  call [scanf]
+   102 000000B8 83C408                          add esp, 4*2
+   103                                          
+   104 000000BB 68[DD360000]                    push dword mesaj_citire_y
+   105 000000C0 FF15[00000000]                  call [printf]
+   106 000000C6 83C404                          add esp, 4
+   107                                          
+   108 000000C9 68[CC360000]                    push dword y_sursa
+   109 000000CE 68[E6360000]                    push dword format
+   110 000000D3 FF15[00000000]                  call [scanf]
+   111 000000D9 83C408                          add esp, 4*2
+   112                                          
+   113 000000DC 68[0C370000]                    push dword mesaj_destinatie
+   114 000000E1 FF15[00000000]                  call [printf]
+   115 000000E7 83C404                          add esp, 4
+   116                                          
+   117 000000EA 68[D4360000]                    push dword mesaj_citire_x
+   118 000000EF FF15[00000000]                  call [printf]
+   119 000000F5 83C404                          add esp, 4
+   120                                          
+   121 000000F8 68[C8360000]                    push dword x_dest
+   122 000000FD 68[E6360000]                    push dword format
+   123 00000102 FF15[00000000]                  call [scanf]
+   124 00000108 83C408                          add esp, 4*2
+   125                                          
+   126 0000010B 68[DD360000]                    push dword mesaj_citire_y
+   127 00000110 FF15[00000000]                  call [printf]
+   128 00000116 83C404                          add esp, 4
+   129                                          
+   130 00000119 68[D0360000]                    push dword y_dest
+   131 0000011E 68[E6360000]                    push dword format
+   132 00000123 FF15[00000000]                  call [scanf]
+   133 00000129 83C408                          add esp, 4*2       
+   134 0000012C C3                              ret
+   135                                          
+   136                                      extract_queue:
+   137 0000012D A1[00000000]                    mov eax, [queue]
+   138 00000132 A3[B4360000]                    mov [dist], eax
+   139 00000137 A1[04000000]                    mov eax, [queue+4]
+   140 0000013C A3[B8360000]                    mov [current_x], eax
+   141 00000141 A1[08000000]                    mov eax, [queue+8]
+   142 00000146 A3[BC360000]                    mov [current_y], eax
+   143 0000014B B900000000                      mov ecx, 0
+   144                                          .repeta:
+   145 00000150 51                                  push ecx
+   146 00000151 89C8                                mov eax, ecx
+   147 00000153 66BA0C00                            mov dx, 12
+   148 00000157 66F7E2                              mul dx
+   149 0000015A 89C1                                mov ecx, eax
+   150 0000015C 89C2                                mov edx, eax
+   151 0000015E 83C20C                              add edx, 12
+   152 00000161 8B82[00000000]                      mov eax, [edx+queue]
+   153 00000167 8981[00000000]                      mov [ecx+queue], eax
+   154 0000016D 8B82[04000000]                      mov eax, [edx+queue+4]
+   155 00000173 8981[04000000]                      mov [ecx+queue+4], eax
+   156 00000179 8B82[08000000]                      mov eax, [edx+queue+8]
+   157 0000017F 8981[08000000]                      mov [ecx+queue+8], eax
+   158 00000185 59                                  pop ecx
+   159 00000186 41                                  inc ecx
+   160 00000187 A1[C0360000]                        mov eax, [queue_count]
+   161 0000018C 39C1                                cmp ecx, eax
+   162 0000018E 7402                                je .gata
+   163 00000190 EBBE                                jmp .repeta
+   164                                          .gata:
+   165 00000192 89C8                            mov eax, ecx
+   166 00000194 66BA0C00                        mov dx, 12
+   167 00000198 66F7E2                          mul dx
+   168 0000019B C780[00000000]0000-             mov [eax+queue], dword 0
+   168 000001A3 0000               
+   169 000001A5 C780[04000000]0000-             mov [eax+queue+4], dword 0
+   169 000001AD 0000               
+   170 000001AF C780[08000000]0000-             mov [eax+queue+8], dword 0
+   170 000001B7 0000               
+   171 000001B9 FF0D[C0360000]                  dec dword [queue_count]
+   172 000001BF C3                              ret
+   173                                              
+   174                                      verif:
+   175 000001C0 A1[B8360000]                    mov eax, [current_x]
+   176 000001C5 8B1D[BC360000]                  mov ebx, [current_y]
+   177 000001CB 03048D[3E370000]                add eax, [ecx*4+directie_x-4]
+   178 000001D2 031C8D[4E370000]                add ebx, [ecx*4+directie_y-4]
+   179 000001D9 8B15[B0360000]                  mov edx, [n]
+   180 000001DF 4A                              dec edx
+   181 000001E0 83F800                          cmp eax, 0
+   182 000001E3 7C36                            jl .not_valid
+   183 000001E5 39D0                            cmp eax, edx
+   184 000001E7 7F32                            jg .not_valid
+   185 000001E9 83FB00                          cmp ebx, 0
+   186 000001EC 7C2D                            jl .not_valid
+   187 000001EE 39D3                            cmp ebx, edx
+   188 000001F0 7F29                            jg .not_valid
+   189 000001F2 53                              push ebx
+   190 000001F3 50                              push eax
+   191 000001F4 89D8                            mov eax, ebx
+   192 000001F6 66F725[B0360000]                mul word [n]
+   193 000001FD 40                              inc eax
+   194 000001FE 01D8                            add eax, ebx
+   195 00000200 89C3                            mov ebx, eax
+   196 00000202 58                              pop eax
+   197 00000203 8A8C18[A00F0000]                mov cl, [eax+ebx+matrix]
+   198 0000020A 5B                              pop ebx
+   199 0000020B 80F923                          cmp cl, "#"
+   200 0000020E 740B                            je .not_valid
+   201 00000210 80F931                          cmp cl, "1"
+   202 00000213 7406                            je .not_valid
+   203 00000215 BA01000000                      mov edx, 1
+   204 0000021A C3                              ret
+   205                                          .not_valid:
+   206 0000021B BA00000000                      mov edx, 0
+   207 00000220 C3                              ret
+   208                                           
+   209                                      lee:
+   210 00000221 C705[00000000]0000-             mov dword [queue], 0
+   210 00000229 0000               
+   211 0000022B A1[C4360000]                    mov eax, [x_sursa]
+   212 00000230 A3[04000000]                    mov [queue+4], eax
+   213 00000235 A1[CC360000]                    mov eax, [y_sursa]
+   214 0000023A A3[08000000]                    mov [queue+8], eax        
+   215 0000023F FF05[C0360000]                  inc dword [queue_count]
+   216                                          .repeat:
+   217 00000245 51                                  push ecx
+   218 00000246 E8E2FEFFFF                          call extract_queue
+   219 0000024B 59                                  pop ecx
+   220 0000024C A1[B8360000]                        mov eax, [current_x]
+   221 00000251 8B1D[BC360000]                      mov ebx, [current_y]
+   222 00000257 53                                  push ebx
+   223 00000258 50                                  push eax
+   224 00000259 89D8                                mov eax, ebx
+   225 0000025B 66F725[B0360000]                    mul word [n]
+   226 00000262 40                                  inc eax
+   227 00000263 01D8                                add eax, ebx
+   228 00000265 89C3                                mov ebx, eax
+   229 00000267 58                                  pop eax
+   230 00000268 C68418[A00F0000]31                  mov byte [eax+ebx+matrix], "1"
+   231 00000270 5B                                  pop ebx
+   232 00000271 3B05[C8360000]                      cmp eax, [x_dest]
+   233 00000277 750A                                jne .nu_e_destinatie
+   234 00000279 3B1D[D0360000]                      cmp ebx, [y_dest]
+   235 0000027F 7502                                jne .nu_e_destinatie
+   236 00000281 EB59                                jmp .destinatie
+   237                                              .nu_e_destinatie:
+   238 00000283 B904000000                          mov ecx, 4
+   239                                              .parcurge:
+   240 00000288 51                                      push ecx
+   241 00000289 E832FFFFFF                              call verif
+   242 0000028E 59                                      pop ecx
+   243 0000028F 83FA00                                  cmp edx, 0
+   244 00000292 7438                                    je .nu_se_adauga
+   245 00000294 8B15[B4360000]                          mov edx, [dist]
+   246 0000029A 42                                      inc edx
+   247 0000029B 51                                      push ecx
+   248 0000029C 53                                      push ebx
+   249 0000029D 8B1D[C0360000]                          mov ebx, [queue_count]
+   250 000002A3 50                                      push eax
+   251 000002A4 52                                      push edx
+   252 000002A5 89D8                                    mov eax,ebx
+   253 000002A7 66BA0C00                                mov dx, 12
+   254 000002AB 66F7E2                                  mul dx
+   255 000002AE 89C1                                    mov ecx, eax
+   256 000002B0 5A                                      pop edx
+   257 000002B1 58                                      pop eax
+   258 000002B2 5B                                      pop ebx
+   259 000002B3 8991[00000000]                          mov [ecx+queue], edx
+   260 000002B9 8981[04000000]                          mov [ecx+queue+4], eax
+   261 000002BF 8999[08000000]                          mov [ecx+queue+8], ebx
+   262 000002C5 FF05[C0360000]                          inc dword [queue_count]
+   263 000002CB 59                                      pop ecx
+   264                                                  .nu_se_adauga:
+   265 000002CC E2BA                                    loop .parcurge
+   266 000002CE 833D[C0360000]00                    cmp dword [queue_count], 0
+   267 000002D5 7406                                je .done
+   268 000002D7 E969FFFFFF                          jmp .repeat
+   269                                          .destinatie:
+   270 000002DC C3                              ret
+   271                                          .done:
+   272 000002DD C705[B4360000]FFFF-             mov dword [dist], -1
+   272 000002E5 FFFF               
+   273 000002E7 C3                              ret
+   274                                          
+   275                                      start:
+   276 000002E8 E813FDFFFF                      call deschide_fisier
+   277 000002ED E830FDFFFF                      call citeste_matrice
+   278 000002F2 E860FDFFFF                      call inchide_fisier
+   279 000002F7 E890FDFFFF                      call citeste_coordonate
+   280 000002FC E820FFFFFF                      call lee
+   281 00000301 E861FDFFFF                      call afiseaza_solutie
+   282                                          .final:
+   283 00000306 6A00                            push    dword 0      ; push the parameter for exit onto the stack
+   284 00000308 FF15[00000000]                  call    [exit]       ; call exit to terminate the program
